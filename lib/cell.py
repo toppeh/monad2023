@@ -1,9 +1,10 @@
 class Cell:
-    def __init__(self, x, y):
+    def __init__(self, x, y, estimate=0):
         self.x = x
         self.y = y
         self.neighbours = dict()
         self.previous_cell = None
+        self.estimate = estimate
 
     def set_neighbours(self, neighbours):
         self.neighbours = neighbours
