@@ -3,11 +3,9 @@ import requests
 import webbrowser
 import websocket
 import json
-# from lib.math import normalize_heading, calc_straight_route, calc_turn, calc_airport_approach, calc_airport_target, calc_dist_to_airport
-import lib.walls
-import lib.neighbours
+import lib.utils
 from lib.cell import Cell
-import lib.algorithm
+
 import time
 from collections import deque
 
@@ -16,7 +14,7 @@ BACKEND_BASE = "goldrush.monad.fi/backend"
 
 game_id = None
 cells = dict()
-#stack = list()
+stack = list()
 queue = deque()
 shortest_path_found = False
 previous_command = None
@@ -50,7 +48,7 @@ def on_close(ws, close_status_code, close_msg):
 
 def generate_commands(game_state):
     print(game_state)
-    global previous_command
+
     # Assume backend serves correct game state.
     position = game_state['player']['position']
     target = game_state['target']
@@ -62,14 +60,86 @@ def generate_commands(game_state):
         cells[(position['x'], position['y'])] = Cell( position['x'], position['y'] )
 
     if shortest_path_found:
-        action = traverse_shortest_path(position)
+        action = traverse__path(position, target, rotation)
     else:
-        action = bfs(position, target, rotation, square)
-    
+        # action = bfs(position, target, rotation, square)
+        action = dfs(position, target, rotation, square)
+    print("action:", action)
     return action
 
+
+# Implements a depth-first algorithm to find a path to the target. Will probably not find the shortest path.
+def dfs(position, target, rotation, square):
+    global shortest_path_found
+    # Get neighbours for a cell if this is the first time visiting it.
+    if len(cells[position['x'], position['y']].neighbours.keys()) == 0:
+        walls = lib.utils.getWalls( square )
+        neighbours = lib.utils.getNeighbours(position, target, walls)
+        cells[(position['x'], position['y'])].set_neighbours( neighbours )
+        create_neighbour_cells( neighbours, position )
+        stack.extend( neighbours.keys() )
+    print("stack:", stack)
+    # If the next cell in queue has any neighbours, that means we have already visited that cell and can skip it.
+    current_cell = cells[(position['x'], position['y'])]
+    next_cell = None
+    while len( cells[ stack[ len(stack)-1 ] ].neighbours.keys() ) > 0:
+        stack.pop()
+    next_cell = stack.pop()
+
+    # Search current cell's neighbours for the next cell.
+    for neighbour_position, neighbour_rotation in current_cell.neighbours.items():
+        print("neighbour: ", neighbour_position, neighbour_rotation)
+        # Target found, great! Reset to traverse the shortest path.
+        if neighbour_position == (target['x'], target['y']):
+            shortest_path_found = True
+            target_cell = Cell( target['x'], target['y'] )
+            target_cell.set_previous_cell( (position['x'], position['y']) )
+            cells[(target['x'], target['y'])] = target_cell
+            print("TARGET FOUND")
+            return { "action": "reset" }
+
+        # Next cell was found in neighbours and the rotation is correct -> move.
+        if neighbour_position == next_cell and rotation == current_cell.neighbours[neighbour_position]:
+            return { "action": "move" }
+
+        # Next cell was found in neighbours but the rotation is incorrect -> rotate.
+        if neighbour_position == next_cell:
+            stack.append( next_cell )  # Add the cell back to the stack.
+            return { "action": "rotate", "rotation": current_cell.neighbours[neighbour_position] }
+
+    # Next cell was not found in neighbours -> we might need to go backwards.
+    # Add the cell back to the stack for now.
+    stack.append( next_cell )
+
+    # Find common ancestor in order to eventually find the next cell.
+    common_ancestor = findCommonAncestor( current_cell, cells[next_cell] )
+    print("common_ancestor", common_ancestor.x, common_ancestor.y)
+    # Need to go backwards to get to common ancestor.
+    if common_ancestor != current_cell:
+        previous_cell_rotation = current_cell.neighbours[current_cell.previous_cell]
+        if rotation == previous_cell_rotation:
+            return { "action": "move" }
+        else:
+            return { "action": "rotate", "rotation": previous_cell_rotation }
+
+    # Current cell is the common ancestor, so we can traverse the path to the next cell.
+    else:
+        while cells[next_cell].previous_cell != (current_cell.x, current_cell.y):
+            print("current_cell:", current_cell, "cells[next_cell].previous_cell:", cells[next_cell].previous_cell)
+            next_cell = cells[next_cell].previous_cell
+        new_target_rotation = current_cell.neighbours[next_cell]
+        print("new_target_rotation:", new_target_rotation)
+        if rotation == new_target_rotation:
+            return { "action": "move" }
+        else:
+            return { "action": "rotate", "rotation": new_target_rotation }
+    
+    # If we get here, something went wrong.
+    return None
+
+
 '''
-Implements a breadth-first search algorithm to find the shortest path to the target. Should be fine for small mazes.
+Implements a breadth-first search algorithm to find the shortest path to the target. Should be fine for small mazes (its not really).
 '''
 def bfs(position, target, rotation, square):
     # Get neighbours for a cell if this is the first time visiting it.
@@ -91,6 +161,36 @@ def bfs(position, target, rotation, square):
 
     print("current_cell:", current_cell.x, current_cell.y)
     print("next_cell:", next_cell)
+
+        # Next cell was not found in neighbours -> we might need to go backwards.
+    # Add the cell back to the queue for now.
+    queue.appendleft( next_cell )
+
+    # Find common ancestor in order to eventually find the next cell.
+    common_ancestor = findCommonAncestor( current_cell, cells[next_cell] )
+    print("common_ancestor", common_ancestor.x, common_ancestor.y)
+    # Need to go backwards to get to common ancestor.
+    if common_ancestor != current_cell:
+        previous_cell_rotation = current_cell.neighbours[current_cell.previous_cell]
+        if rotation == previous_cell_rotation:
+            return { "action": "move" }
+        else:
+            return { "action": "rotate", "rotation": previous_cell_rotation }
+
+    # Current cell is the common ancestor, so we can traverse the path to the next cell.
+    else:
+        while cells[next_cell].previous_cell != (current_cell.x, current_cell.y):
+            print("current_cell:", current_cell, "cells[next_cell].previous_cell:", cells[next_cell].previous_cell)
+            next_cell = cells[next_cell].previous_cell
+        new_target_rotation = current_cell.neighbours[next_cell]
+        print("new_target_rotation:", new_target_rotation)
+        if rotation == new_target_rotation:
+            return { "action": "move" }
+        else:
+            return { "action": "rotate", "rotation": new_target_rotation }
+    
+    # If we get here, something went wrong.
+    return None
 
     # Search current cell's neighbours for the next cell.
     for neighbour_position, neighbour_rotation in current_cell.neighbours.items():
@@ -144,19 +244,16 @@ def bfs(position, target, rotation, square):
     # If we get here, something went wrong.
     return None
 
-def traverse_shortest_path(position, rotation):
-    # Get target from path. There should always be at least 2 elements in the path at this stage.
-    path.pop(0)
-    target = path[0]
-    
-    for neighbour in cells[(position['x'], position['y'])].neighbours:
-        if neighbour[0] == target and rotation == neighbour[2]:
-            return { "action": "move" }
-        if neighbour[0] == target and rotation != neighbour[2]:
-            return { "action": "rotate", "rotation": neighbour[2] }
-    
-    # If we get here, something went wrong.
-    return None
+# Traverses the found path from the current position to the target.
+def traverse_path(position, target, rotation):
+    target = cells[(target['x'], target['y'])]
+    while target.previous_cell != (position['x'], position['y']):
+        target = cells[target.previous_cell]
+    if rotation != cells[(position['x'], position['y'])].neighbours[(target.x, target.y)]:
+        return { "action": "rotate", "rotation": cells[(position['x'], position['y'])].neighbours[(target.x, target.y)] }
+    else:
+        return { "action": "move" }
+
 
 def create_neighbour_cells(neighbours, position):
     for pos, rotation in neighbours.items():
