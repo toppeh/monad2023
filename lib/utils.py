@@ -2,7 +2,7 @@ from math import sqrt
 
 # Returns a list of neighbours for a given cell.
 # A neighbour is represented as a tuple of (x, y, distance_to_target, rotation, previous_cell)
-def getNeighbours(position, target, walls):
+def getNeighbours(position, walls):
     neighbours = dict()
     x = position[0]
     y = position[1]
@@ -19,9 +19,8 @@ def getNeighbours(position, target, walls):
 # Heuristic function for A* algorithm. Adjust factor to change priorization.
 # Smaller factor -> more time, better score.
 def calculateDistance(position, target):
-    factor = 1000
+    factor = 1
     return factor * sqrt((position[0] - target['x'])**2 + (position[1] - target['y'])**2)
-
 
 # Get walls for a cell.
 def getWalls( square ):
@@ -32,7 +31,6 @@ def getWalls( square ):
         "south": square & WALLS[2] != 0,
         "west": square & WALLS[3] != 0
     }
-
 
 # Calculate counter-rotation.
 def get_opposite_angle(angle):
@@ -98,3 +96,13 @@ def optimize_path(path, cells):
             optimized_path.append(current_cell)
             i += 1
     return optimized_path
+
+# Sets b to be the parent of a. Function will move upwards a's lineage tree and repeat the operation.
+def update_cell_previous_path(a, b, cells, costs):
+    while cells[a].previous_cell is not None and costs[a] > costs[b] + 1:
+        cells[a].set_previous_cell(b)
+        costs[a] = costs[b] + 1
+        temp = cells[a].previous_cell
+        b = a
+        a = temp
+    return costs

@@ -5,6 +5,7 @@ class Cell:
         self.neighbours = dict()
         self.previous_cell = None
         self.estimate = estimate
+        self.visited = False
 
     def set_neighbours(self, neighbours):
         self.neighbours.update(neighbours)
@@ -13,3 +14,6 @@ class Cell:
     
     def set_previous_cell(self, position):
         self.previous_cell = position
+
+    def set_visited(self):
+        self.visited = True
