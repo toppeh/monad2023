@@ -7,7 +7,7 @@ class Cell:
         self.estimate = estimate
 
     def set_neighbours(self, neighbours):
-        self.neighbours = neighbours
+        self.neighbours.update(neighbours)
         # print("neighbours:", neighbours)
         # print("self.neighbours:", self.neighbours)
     
