@@ -4,8 +4,8 @@ from math import sqrt
 # A neighbour is represented as a tuple of (x, y, distance_to_target, rotation, previous_cell)
 def getNeighbours(position, target, walls):
     neighbours = dict()
-    x = position['x']
-    y = position['y']
+    x = position[0]
+    y = position[1]
     if not walls['north']:
         neighbours[(x, y-1)] = 0
     if not walls['east']:
@@ -19,7 +19,7 @@ def getNeighbours(position, target, walls):
 # Heuristic function for A* algorithm. Adjust factor to change priorization.
 # Smaller factor -> more time, better score.
 def calculateDistance(position, target):
-    factor = 1.05
+    factor = 1000
     return factor * sqrt((position[0] - target['x'])**2 + (position[1] - target['y'])**2)
 
 

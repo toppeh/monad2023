@@ -24,6 +24,7 @@ prio_queue = PriorityQueue()
 costs = dict()
 estimates = dict()
 path = list()
+distance_cost_factor = 1
 
 def on_message(ws: websocket.WebSocketApp, message):
     [action, payload] = json.loads(message)
@@ -59,16 +60,17 @@ def generate_commands(game_state):
 
     # Assume backend serves correct game state.
     position = game_state['player']['position']
+    position = ( position['x'], position['y'] )
     target = game_state['target']
     rotation = game_state['player']['rotation']
     square = game_state['square']
     
     # Initialize algorithms.
     if len(cells) == 0:
-        cells[(position['x'], position['y'])] = Cell( position['x'], position['y'] )
-        prio_queue.put( (0, ( position['x'], position['y']) ) )
-        costs[(position['x'], position['y'])] = 0
-        estimates[(position['x'], position['y'])] = lib.utils.calculateDistance( (position['x'], position['y']), target )
+        cells[position] = Cell( position[0], position[1] )
+        prio_queue.put( (0, position ) )
+        costs[position] = 0
+        estimates[position] = lib.utils.calculateDistance( position, target )
 
     # Decide what to do.
     if shortest_path_found:
@@ -83,11 +85,11 @@ def generate_commands(game_state):
             print("OPTIMIZING PATH DONE: ", path)
 
         # Travel the path to target cell.
-        position = (position['x'], position['y'])
         action = traverse_path(position, rotation, path)
     else:
         # Search for the target.
-        action = a_star(position, target, rotation, square)
+        # action = a_star(position, target, rotation, square)
+        action = dfs(position, target, rotation, square)
     print("action:", action)
     return action
 
@@ -132,7 +134,7 @@ def a_star(position, target, rotation, square):
             if cost_from_current < costs[neighbour_position]:
                 # Found a shorter path to this neighbour, update cell data.
                 costs[neighbour_position] = cost_from_current
-                prio_queue.put( (cost_from_current + estimates[neighbour_position], neighbour_position) )
+                prio_queue.put( (distance_cost_factor * cost_from_current + estimates[neighbour_position], neighbour_position) )
                 cells[neighbour_position].set_previous_cell( current_cell )
     
     # We are not on the right cell for the algorithm, so put the cell back in the queue for now.
@@ -218,12 +220,12 @@ def create_neighbour_cells(neighbours, position, target={'x': 999999, 'y': 99999
             # First time we see this cell. Initialize.
             estimate_to_target = lib.utils.calculateDistance( pos, target )
             new_cell = Cell( pos[0], pos[1], estimate_to_target )
-            new_cell.set_previous_cell( (position["x"], position["y"]) )
+            new_cell.set_previous_cell( position )
             cells[pos] = new_cell
-            costs[pos] = costs[(position["x"], position["y"])] + 1
+            costs[pos] = costs[position] + 1
             estimates[pos] = estimate_to_target
-            prio_queue.put( (costs[pos] + estimate_to_target, pos) )
-        cells[pos].neighbours[(position["x"], position["y"])] = lib.utils.get_opposite_angle(rotation)
+            prio_queue.put( (distance_cost_factor*costs[pos] + estimate_to_target, pos) )
+        cells[pos].neighbours[position] = lib.utils.get_opposite_angle(rotation)
 
 
 # Finds common ancestor of two cells. Probably not the most efficient way to do this.
@@ -247,11 +249,80 @@ def findCommonAncestor(a, b):
     # If we got here, root cell is the common ancestor.
     return cells[(b.x, b.y)] 
  
+def dfs(position, target, rotation, square):
+    global shortest_path_found
+    # Get neighbours for a cell if this is the first time visiting it.
+    if len(cells[position].neighbours.keys()) <= 1:
+        walls = lib.utils.getWalls( square )
+        neighbours = lib.utils.getNeighbours(position, target, walls)
+        cells[position].set_neighbours( neighbours )
+        create_neighbour_cells( neighbours, position )
+        stack.extend( neighbours.keys() )
+    print("stack:", stack)
+    # If the next cell in stack has more than one neighbour, that means we have already visited that cell and can skip it.
+    # We can visit dead end cells multiple times but shouldn't be a big problem.
+    current_cell = cells[position]
+    next_cell = stack.pop()
+    while len(cells[next_cell].neighbours.keys()) > 1:
+        next_cell = stack.pop()
+    print("next_cell:", next_cell)
+
+    # Search current cell's neighbours for the next cell.
+    for neighbour_position, neighbour_rotation in current_cell.neighbours.items():
+        print("neighbour: ", neighbour_position, neighbour_rotation)
+        # Target found, great! Reset to traverse the shortest path.
+        if neighbour_position == (target['x'], target['y']):
+            shortest_path_found = True
+            target_cell = Cell( target['x'], target['y'] )
+            target_cell.set_previous_cell( position )
+            cells[(target['x'], target['y'])] = target_cell
+            print("TARGET FOUND")
+            return { "action": "reset" }
+
+        # Next cell was found in neighbours and the rotation is correct -> move.
+        if neighbour_position == next_cell and rotation == current_cell.neighbours[neighbour_position]:
+            return { "action": "move" }
+
+        # Next cell was found in neighbours but the rotation is incorrect -> rotate.
+        if neighbour_position == next_cell:
+            stack.append( next_cell )  # Add the cell back to the stack.
+            return { "action": "rotate", "rotation": current_cell.neighbours[neighbour_position] }
+
+    # Next cell was not found in neighbours -> we might need to go backwards.
+    # Add the cell back to the stack for now.
+    stack.append( next_cell )
+
+    # Find common ancestor in order to eventually find the next cell.
+    common_ancestor = findCommonAncestor( current_cell, cells[next_cell] )
+    print("common_ancestor", common_ancestor.x, common_ancestor.y)
+    # Need to go backwards to get to common ancestor.
+    if common_ancestor != current_cell:
+        previous_cell_rotation = current_cell.neighbours[current_cell.previous_cell]
+        if rotation == previous_cell_rotation:
+            return { "action": "move" }
+        else:
+            return { "action": "rotate", "rotation": previous_cell_rotation }
+
+    # Current cell is the common ancestor, so we can traverse the path to the next cell.
+    else:
+        while cells[next_cell].previous_cell != (current_cell.x, current_cell.y):
+            print("current_cell:", current_cell, "cells[next_cell].previous_cell:", cells[next_cell].previous_cell)
+            next_cell = cells[next_cell].previous_cell
+        new_target_rotation = current_cell.neighbours[next_cell]
+        print("new_target_rotation:", new_target_rotation)
+        if rotation == new_target_rotation:
+            return { "action": "move" }
+        else:
+            return { "action": "rotate", "rotation": new_target_rotation }
+
+    # If we get here, something went wrong.
+    return None
+
 
 def main():
     config = dotenv_values()
     res = requests.post(
-        f"https://{BACKEND_BASE}/api/levels/{config['LEVEL1_ID']}",
+        f"https://{BACKEND_BASE}/api/levels/{config['LEVEL_ID']}",
         headers={
             "Authorization": config["PLAYER_TOKEN"]
         })
