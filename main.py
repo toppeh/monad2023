@@ -25,7 +25,7 @@ costs = dict()
 estimates = dict()
 path = list()
 distance_cost_factor = 1
-use_heuristics_in_dfs = False
+use_heuristics_in_dfs = True
 
 def on_message(ws: websocket.WebSocketApp, message):
     [action, payload] = json.loads(message)
@@ -175,15 +175,14 @@ def a_star(position, target, rotation, square):
 
 # Traverses the found path from the current position to the target.
 def traverse_path(position, rotation, path):
-    print("traverse_path(): path:", path)
     if len(path) < 2:
         print("traverse_path(): Path too short")
         return None
     current_cell = path[0]
     target = path[1]
-    print("traverse_path(): current_cell:", current_cell, "target:", target)
+    print("traverse_path(): current_cell:", current_cell, "len(path):", len(path))
     if current_cell != position:
-        print(f'traverse_path(): Unexpected position: current_cell<{currenwillt_cell}> != position<{position}>')
+        print(f'traverse_path(): Unexpected position: current_cell<{current_cell}> != position<{position}>')
         return None
     
     rotation_to_next = cells[current_cell].neighbours.get(target) 
@@ -263,9 +262,8 @@ def dfs(position, target, rotation, square):
         else:
             # Just add neighbours to stack in 'random' order.
             stack.extend( neighbours.keys() )
-
         cells[position].set_visited()
-    # print("stack:", stack)
+
     # Choose next_cell but skip visited cells.
     current_cell = cells[position]
     next_cell = stack.pop()

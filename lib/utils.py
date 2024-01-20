@@ -97,6 +97,12 @@ def optimize_path(path, cells):
             i += 1
     return optimized_path
 
+# Optimizes a single corner, if possible
+def optimize_corner(current_cell, parent, grandparent, cells):
+    if abs(current_cell[0] - grandparent[0]) < 2 and abs(current_cell[1] - grandparent[1]) < 2:
+        cells[current_cell].set_previous_cell(grandparent)
+    
+
 # Sets b to be the parent of a if the shortest path to a goes through b rather than a.previous_cell.
 # Function will move upwards a's lineage tree and repeat the operation until condition is no longer true.
 def update_cell_previous_path(a, b, cells, costs):
