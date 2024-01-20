@@ -24,8 +24,8 @@ prio_queue = PriorityQueue()
 costs = dict()
 estimates = dict()
 path = list()
-dist_traveled_factor = 0.4
-dist_to_go_factor = 10
+dist_traveled_factor = 0.2
+dist_to_go_factor = 1
 use_DFS = False
 
 use_heuristics_in_dfs = True
@@ -74,7 +74,7 @@ def generate_commands(game_state):
         cells[position] = Cell( position[0], position[1] )
         prio_queue.put( (0, position ) )
         costs[position] = 0
-        estimates[position] = dist_to_go_factor * lib.utils.calculateDistance( position, target )
+        estimates[position] = dist_to_go_factor * lib.utils.chebyshevDistance( position, target )
 
     # Decide what to do.
     if shortest_path_found:
@@ -218,7 +218,7 @@ def create_neighbour_cells(neighbours, position, costs={}, target={'x': 999999, 
     for pos, rotation in neighbours.items():
         if not pos in cells:
             # First time we see this cell. Initialize.
-            estimate_to_target = dist_to_go_factor * lib.utils.calculateDistance( pos, target )
+            estimate_to_target = dist_to_go_factor * lib.utils.chebyshevDistance( pos, target )
             new_cell = Cell( pos[0], pos[1], estimate_to_target )
             new_cell.set_previous_cell( position )
             cells[pos] = new_cell

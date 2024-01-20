@@ -21,6 +21,9 @@ def getNeighbours(position, walls):
 def calculateDistance(position, target):
     return sqrt((position[0] - target['x'])**2 + (position[1] - target['y'])**2)
 
+def chebyshevDistance(position, target):
+    return max(abs(position[0] - target['x']), abs(position[1] - target['y']))
+
 # Get walls for a cell.
 def getWalls( square ):
     WALLS = [0b1000, 0b0100, 0b0010, 0b0001] # north, east, south, west
