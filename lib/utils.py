@@ -19,8 +19,7 @@ def getNeighbours(position, walls):
 # Heuristic function for A* algorithm. Adjust factor to change priorization.
 # Smaller factor -> more time, better score.
 def calculateDistance(position, target):
-    factor = 1
-    return factor * sqrt((position[0] - target['x'])**2 + (position[1] - target['y'])**2)
+    return sqrt((position[0] - target['x'])**2 + (position[1] - target['y'])**2)
 
 # Get walls for a cell.
 def getWalls( square ):
@@ -54,7 +53,7 @@ def calculate_rotation_from_position(origin_position, target_position):
     else:
         # Input cell are not diagonally adjacent.
         print("Error: calculate_rotation_from_position() got invalid arguments.")
-        return None
+        raise ValueError
 
 # Forms a path from the target cell to the origin cell.
 def form_path(target, cells, start):
@@ -64,7 +63,6 @@ def form_path(target, cells, start):
         target = cells[target].previous_cell
     # Insert root cell.
     path.insert(0, target)
-    print("Formed path:", path)
     return path
 
 # Will optimize (=diagonalize) path beginning from the start.
@@ -98,9 +96,15 @@ def optimize_path(path, cells):
     return optimized_path
 
 # Optimizes a single corner, if possible
-def optimize_corner(current_cell, parent, grandparent, cells):
-    if abs(current_cell[0] - grandparent[0]) < 2 and abs(current_cell[1] - grandparent[1]) < 2:
+def optimize_corner(current_cell, grandparent, cells, costs):
+    # if abs(current_cell[0] - grandparent[0]) < 2 and abs(current_cell[1] - grandparent[1]) < 2:
+    if abs(current_cell[0] - grandparent[0]) == 1 and abs(current_cell[1] - grandparent[1]) == 1:
+        print("optimizing corner:", current_cell, grandparent)
         cells[current_cell].set_previous_cell(grandparent)
+        costs[current_cell] = costs[grandparent] + 1
+        cells[current_cell].neighbours[grandparent] = calculate_rotation_from_position(current_cell, grandparent)
+        cells[grandparent].neighbours[current_cell] = calculate_rotation_from_position(grandparent, current_cell)
+    return costs
     
 
 # Sets b to be the parent of a if the shortest path to a goes through b rather than a.previous_cell.

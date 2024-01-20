@@ -24,7 +24,10 @@ prio_queue = PriorityQueue()
 costs = dict()
 estimates = dict()
 path = list()
-distance_cost_factor = 1
+dist_traveled_factor = 0.4
+dist_to_go_factor = 10
+use_DFS = False
+
 use_heuristics_in_dfs = True
 
 def on_message(ws: websocket.WebSocketApp, message):
@@ -71,7 +74,7 @@ def generate_commands(game_state):
         cells[position] = Cell( position[0], position[1] )
         prio_queue.put( (0, position ) )
         costs[position] = 0
-        estimates[position] = lib.utils.calculateDistance( position, target )
+        estimates[position] = dist_to_go_factor * lib.utils.calculateDistance( position, target )
 
     # Decide what to do.
     if shortest_path_found:
@@ -83,20 +86,23 @@ def generate_commands(game_state):
             print("OPTIMIZING PATH")
             path = lib.utils.optimize_path( path, cells )
             path_optimized = True
-            print("OPTIMIZING PATH DONE: ", path)
+            print("OPTIMIZING PATH DONE") #, path)
 
         # Travel the path to target cell.
         action = traverse_path(position, rotation, path)
     else:
         # Search for the target.
-        # action = a_star(position, target, rotation, square)
-        action = dfs(position, target, rotation, square)
+        if use_DFS:
+            action = dfs(position, target, rotation, square)
+        else:
+            action = a_star(position, target, rotation, square)
     print("action:", action)
     return action
 
 # Implements the A* algorithm.
 def a_star(position, target, rotation, square):
     global shortest_path_found
+    global costs
     current_cell = position
     
     # Get next cell. Ignore cells that to which we have already discovered the shortest path.
@@ -108,14 +114,25 @@ def a_star(position, target, rotation, square):
     if current_cell == next_cell[1]:
          # We are on the cell with the most potential, so we can proceed with the algorithm.
 
-        # Initialize the neighbours if this is the first time visiting this cell (or if it's a dead end...).
-        if len(cells[position].neighbours.keys()) <= 1:
+        # Try to straighten the corner leading to this cell, if there is one. Hopefully this will ease traveling back and forth.
+        if cells[current_cell].previous_cell is not None:
+            print("attempting to optimize corner")
+            parent = cells[current_cell].previous_cell
+            if cells[parent].previous_cell is not None:
+                grandparent = cells[parent].previous_cell
+                print("current_cell:", current_cell, "parent:", parent, "grandparent:", grandparent)
+                costs = lib.utils.optimize_corner(current_cell, grandparent, cells, costs)
+
+
+        # Initialize the neighbours if this is the first time visiting this cell.
+        if not cells[position].visited:
             walls = lib.utils.getWalls( square )
             neighbours = lib.utils.getNeighbours(position, walls)
             cells[position].set_neighbours( neighbours )
             create_neighbour_cells( neighbours, position, costs, target )
+            cells[position].set_visited()
         
-        # Update estimates for neighbours.will
+        # Update estimates for neighbours.
         for neighbour_position, neighbour_rotation in cells[current_cell].neighbours.items():
             # Target found, stop algorithm.
             if neighbour_position == (target['x'], target['y']):
@@ -131,7 +148,7 @@ def a_star(position, target, rotation, square):
             if cost_from_current < costs[neighbour_position]:
                 # Found a shorter path to this neighbour, update cell data.
                 costs[neighbour_position] = cost_from_current
-                prio_queue.put( (distance_cost_factor * cost_from_current + estimates[neighbour_position], neighbour_position) )
+                prio_queue.put( (dist_traveled_factor * cost_from_current + estimates[neighbour_position], neighbour_position) )
                 cells[neighbour_position].set_previous_cell( current_cell )
     
     # We are not on the right cell for the algorithm, so put the cell back in the queue for now.
@@ -144,7 +161,7 @@ def a_star(position, target, rotation, square):
     # Before searching for common ancestor between current cell and next cell check for next cell in current cell's neighbours.
     # This might save time as next cell is somewhat likely to be a neighbour.
     for neighbour_position, neighbour_rotation in cells[current_cell].neighbours.items():
-        if neighbour_position == next_cell and rotation == cells[current_cell].neighbours[neighbour_position]:
+        if neighbour_position == next_cell and rotation == neighbour_rotation:
             return { "action": "move" }
         # Next cell was found in neighbours but the rotation is incorrect -> rotate.
         if neighbour_position == next_cell:
@@ -154,6 +171,7 @@ def a_star(position, target, rotation, square):
     # Need to go backwards to get to common ancestor. Could search for a better path towards next cell here 
     # (like using an 'inner' a* to find cheapest route from current cell to next cell).
     common_ancestor = findCommonAncestor( cells[current_cell], cells[next_cell] )
+
     if (common_ancestor.x, common_ancestor.y) != current_cell:
         previous_cell_rotation = cells[current_cell].neighbours[cells[current_cell].previous_cell]
         if rotation == previous_cell_rotation:
@@ -187,7 +205,7 @@ def traverse_path(position, rotation, path):
     
     rotation_to_next = cells[current_cell].neighbours.get(target) 
     if rotation_to_next is None:
-        rotation_to_next = lib.utils.calculate_rotation_from_position(current_cell, target)
+        rotation_to_next = dist_to_go_factor * lib.utils.calculate_rotation_from_position(current_cell, target)
     
     if rotation != rotation_to_next:
         return { "action": "rotate", "rotation": rotation_to_next }
@@ -200,18 +218,19 @@ def create_neighbour_cells(neighbours, position, costs={}, target={'x': 999999, 
     for pos, rotation in neighbours.items():
         if not pos in cells:
             # First time we see this cell. Initialize.
-            estimate_to_target = lib.utils.calculateDistance( pos, target )
+            estimate_to_target = dist_to_go_factor * lib.utils.calculateDistance( pos, target )
             new_cell = Cell( pos[0], pos[1], estimate_to_target )
             new_cell.set_previous_cell( position )
             cells[pos] = new_cell
             costs[pos] = costs[position] + 1
             estimates[pos] = estimate_to_target
-            prio_queue.put( (distance_cost_factor*costs[pos] + estimate_to_target, pos) )
+            prio_queue.put( (dist_traveled_factor*costs[pos] + estimate_to_target, pos) )
         
         # Detect loops.
-        if cells[pos].previous_cell != position and pos != cells[position].previous_cell:
+        if use_DFS and cells[pos].previous_cell != position and pos != cells[position].previous_cell:
             # Loop detected. This neighbour will have a shorter path to the start cell so go back in the path
             # and update previous cell data.
+            print("pls no")
             costs = lib.utils.update_cell_previous_path( position, pos, cells, costs )
 
         cells[pos].neighbours[position] = lib.utils.get_opposite_angle(rotation)
@@ -254,7 +273,7 @@ def dfs(position, target, rotation, square):
         if use_heuristics_in_dfs:
             neighbours_by_dist = list()
             for neighbour in neighbours.keys():
-                neighbours_by_dist.append( (lib.utils.calculateDistance( neighbour, target ), neighbour) )
+                neighbours_by_dist.append( ( dist_to_go_factor * lib.utils.calculateDistance( neighbour, target ), neighbour) )
             sort_by_dist = lambda x: x[0]
             neighbours_by_dist.sort(reverse=True, key=sort_by_dist)
             for i in neighbours_by_dist:
