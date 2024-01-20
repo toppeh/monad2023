@@ -25,6 +25,7 @@ costs = dict()
 estimates = dict()
 path = list()
 distance_cost_factor = 1
+use_heuristics_in_dfs = False
 
 def on_message(ws: websocket.WebSocketApp, message):
     [action, payload] = json.loads(message)
@@ -114,7 +115,7 @@ def a_star(position, target, rotation, square):
             cells[position].set_neighbours( neighbours )
             create_neighbour_cells( neighbours, position, costs, target )
         
-        # Update estimates for neighbours.
+        # Update estimates for neighbours.will
         for neighbour_position, neighbour_rotation in cells[current_cell].neighbours.items():
             # Target found, stop algorithm.
             if neighbour_position == (target['x'], target['y']):
@@ -182,7 +183,7 @@ def traverse_path(position, rotation, path):
     target = path[1]
     print("traverse_path(): current_cell:", current_cell, "target:", target)
     if current_cell != position:
-        print(f'traverse_path(): Unexpected position: current_cell<{current_cell}> != position<{position}>')
+        print(f'traverse_path(): Unexpected position: current_cell<{currenwillt_cell}> != position<{position}>')
         return None
     
     rotation_to_next = cells[current_cell].neighbours.get(target) 
@@ -207,10 +208,13 @@ def create_neighbour_cells(neighbours, position, costs={}, target={'x': 999999, 
             costs[pos] = costs[position] + 1
             estimates[pos] = estimate_to_target
             prio_queue.put( (distance_cost_factor*costs[pos] + estimate_to_target, pos) )
-        if costs[position] >  costs[pos] +1:
-            # Found a shorter path to current cell, update cell data. Used in DFS
-            costs = lib.utils.update_cell_previous_path( position, pos, cells, costs)
-            # prio_queue.put( (distance_cost_factor*costs[pos] + estimates[pos], pos) )
+        
+        # Detect loops.
+        if cells[pos].previous_cell != position and pos != cells[position].previous_cell:
+            # Loop detected. This neighbour will have a shorter path to the start cell so go back in the path
+            # and update previous cell data.
+            costs = lib.utils.update_cell_previous_path( position, pos, cells, costs )
+
         cells[pos].neighbours[position] = lib.utils.get_opposite_angle(rotation)
 
 
@@ -245,17 +249,20 @@ def dfs(position, target, rotation, square):
         neighbours = lib.utils.getNeighbours(position, walls)
         cells[position].set_neighbours( neighbours )
         create_neighbour_cells( neighbours, position, costs )
-        
+
         # Add neighbours to stack in order of distance to target.
         # This heuristic was implemented because of the increasing maze size. Not sure if actually helpful.
-        neighbours_by_dist = list()
-        for neighbour in neighbours.keys():
-            neighbours_by_dist.append( (lib.utils.calculateDistance( neighbour, target ), neighbour) )
-        sort_by_dist = lambda x: x[0]
-        neighbours_by_dist.sort(reverse=True, key=sort_by_dist)
-        for i in neighbours_by_dist:
-            stack.append( i[1] )
-        # stack.extend( neighbours.keys() )
+        if use_heuristics_in_dfs:
+            neighbours_by_dist = list()
+            for neighbour in neighbours.keys():
+                neighbours_by_dist.append( (lib.utils.calculateDistance( neighbour, target ), neighbour) )
+            sort_by_dist = lambda x: x[0]
+            neighbours_by_dist.sort(reverse=True, key=sort_by_dist)
+            for i in neighbours_by_dist:
+                stack.append( i[1] )
+        else:
+            # Just add neighbours to stack in 'random' order.
+            stack.extend( neighbours.keys() )
 
         cells[position].set_visited()
     # print("stack:", stack)
@@ -265,6 +272,9 @@ def dfs(position, target, rotation, square):
     while cells[next_cell].visited or next_cell == (current_cell.x, current_cell.y):  # second condition is needed. Source: trust me.
         next_cell = stack.pop()
     # print("next_cell:", next_cell)
+    print("len(saved_cells):", len(cells))
+    print("len(stack):", len(stack))
+    print("next_cell:", next_cell)
 
     # Search current cell's neighbours for the next cell.
     for neighbour_position, neighbour_rotation in current_cell.neighbours.items():

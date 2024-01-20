@@ -97,12 +97,35 @@ def optimize_path(path, cells):
             i += 1
     return optimized_path
 
-# Sets b to be the parent of a. Function will move upwards a's lineage tree and repeat the operation.
+# Sets b to be the parent of a if the shortest path to a goes through b rather than a.previous_cell.
+# Function will move upwards a's lineage tree and repeat the operation until condition is no longer true.
 def update_cell_previous_path(a, b, cells, costs):
     while cells[a].previous_cell is not None and costs[a] > costs[b] + 1:
+        old_a_prev = cells[a].previous_cell
         cells[a].set_previous_cell(b)
         costs[a] = costs[b] + 1
-        temp = cells[a].previous_cell
         b = a
-        a = temp
+        a = old_a_prev
     return costs
+
+# Calculates coordinates for the cell from where we came to this position. Could probably calculate fancily but this works.
+def calculate_came_from(position, rotation):
+    if rotation == 0:
+        return (position[0], position[1] - 1)
+    elif rotation == 45:
+        return (position[0] + 1, position[1] - 1)
+    elif rotation == 90:
+        return (position[0] - 1, position[1])
+    elif rotation == 135:
+        return (position[0] + 1, position[1] + 1)
+    elif rotation == 180:
+        return (position[0], position[1] + 1)
+    elif rotation == 225:
+        return (position[0] - 1, position[1] + 1)
+    elif rotation == 270:
+        return (position[0] + 1, position[1])
+    elif rotation == 315:
+        return (position[0] - 1, position[1] - 1)
+    else:
+        print("Error: calculate_came_from() got invalid arguments.")
+        return None
