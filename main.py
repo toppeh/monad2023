@@ -26,7 +26,7 @@ estimates = dict()
 path = list()
 dist_traveled_factor = 0.2
 dist_to_go_factor = 1
-use_DFS = False
+use_DFS = True
 
 use_heuristics_in_dfs = True
 

@@ -1,6 +1,10 @@
 # monad2023
 This repo is a solution to Monad's 2023 recruiting code challenge.
 
+To run:
+`python3 main.py`
+Tested with Python 3.10.12
+
 The problem was to guide a miner to a lump of gold in a mine.
 My solution was to use two graph algorithms, DFS and A*, to find a way through
 the mine. 
